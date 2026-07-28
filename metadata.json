@@ -1,0 +1,6 @@
+{
+  "name": "Amanah – Debt & Loan Tracker",
+  "description": "A modern, professional debt and loan tracking SaaS platform featuring visual analytics, borrower tracking, loan logs, payment records, agreement monitoring, and reminder logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
