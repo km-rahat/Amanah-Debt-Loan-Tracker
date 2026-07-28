@@ -147,7 +147,8 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="rahatboss015@gmail.com"
+                  placeholder="Enter your email"
+                  autoComplete="off"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 bg-white dark:bg-slate-950 dark:border-slate-800 dark:text-white transition-all"
                   id="login-email-input"
                 />
@@ -172,7 +173,8 @@ export default function Login() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
+                  autoComplete="new-password"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 bg-white dark:bg-slate-950 dark:border-slate-800 dark:text-white transition-all"
                   id="login-password-input"
                 />
