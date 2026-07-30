@@ -71,7 +71,7 @@ export interface Agreement {
   createdDate: string;
   version: string;
   pdfUrl?: string;
-  status: 'Signed' | 'Pending' | 'Draft' | 'Archived' | 'Active';
+  status: 'Signed' | 'Pending' | 'Draft' | 'Archived' | 'Active' | 'Completed' | 'Partially Paid';
   agreementNumber?: string;
   currentVersion?: number;
   totalPaid?: number;

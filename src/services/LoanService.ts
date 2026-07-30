@@ -165,34 +165,6 @@ export class LoanService {
     try {
       assertSupabaseSetup();
 
-      // NEW BUSINESS RULE CHECK:
-      // Verify if borrower has any active/pending/unpaid loan
-      const { data: existingLoans, error: checkErr } = await supabase
-        .from('loans')
-        .select('*, payments(payment_amount)')
-        .eq('borrower_id', loan.borrowerId);
-
-      if (checkErr) {
-        console.error('[LoanService.create] Error verifying borrower loans:', checkErr.message);
-        throw new LoanError('Could not verify borrower loan history, please try again.', 'LOAN_CHECK_FAILED');
-      }
-
-      const hasOutstandingLoan = (existingLoans || []).some((l: any) => {
-        const loanAmount = Number(l.loan_amount ?? l.amount ?? 0);
-        const totalPaid = Array.isArray(l.payments)
-          ? l.payments.reduce((sum: number, p: any) => sum + Number(p.payment_amount ?? 0), 0)
-          : Number(l.remaining_amount !== undefined && l.remaining_amount !== null ? loanAmount - l.remaining_amount : 0);
-        const remaining = Math.max(0, Math.round((loanAmount - totalPaid) * 100) / 100);
-        return remaining > 0 || (l.status && l.status !== 'Completed' && l.status !== 'Fully Paid');
-      });
-
-      if (hasOutstandingLoan) {
-        throw new LoanError(
-          'This borrower already has an outstanding loan. New loan cannot be issued until it is fully repaid.',
-          'OUTSTANDING_LOAN_EXISTS'
-        );
-      }
-
       const dbData = this.mapToDb({
         ...loan,
         status: loan.status && loan.status !== 'Active' ? loan.status : 'Pending',

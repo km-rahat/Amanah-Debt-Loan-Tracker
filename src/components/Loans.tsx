@@ -96,13 +96,7 @@ export default function Loans() {
   const isLoanDateValid = loanDate !== '';
   const isDueDateValid = dueDate !== '' && (loanDate === '' || new Date(dueDate) >= new Date(loanDate));
 
-  // Check if selected borrower has an unpaid/outstanding loan
-  const selectedBorrowerHasUnpaidLoan = Boolean(
-    borrowerId &&
-    loans.some(l => l.borrowerId === borrowerId && (l.remainingAmount > 0 || (l.status !== 'Completed' && l.status !== 'Fully Paid')))
-  );
-
-  const isFormValid = isBorrowerValid && isAmountValid && isPurposeValid && isLoanDateValid && isDueDateValid && (view !== 'add' || !selectedBorrowerHasUnpaidLoan);
+  const isFormValid = isBorrowerValid && isAmountValid && isPurposeValid && isLoanDateValid && isDueDateValid;
 
   // Clear states when transitioning
   const handleOpenAdd = () => {
@@ -156,11 +150,6 @@ export default function Loans() {
     setPurposeTouched(true);
     setLoanDateTouched(true);
     setDueDateTouched(true);
-
-    if (selectedBorrowerHasUnpaidLoan) {
-      showToast('This borrower already has an outstanding loan. New loan cannot be issued until it is fully repaid.', 'error');
-      return;
-    }
 
     if (!isFormValid) return;
 
@@ -598,14 +587,11 @@ export default function Loans() {
                     }`}
                   >
                     <option value="">-- Choose registered borrower profile --</option>
-                    {borrowers.map((b) => {
-                      const hasUnpaid = loans.some(l => l.borrowerId === b.id && (l.remainingAmount > 0 || (l.status !== 'Completed' && l.status !== 'Fully Paid')));
-                      return (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.phone}){hasUnpaid ? ' — [Has Outstanding Loan]' : ''}
-                        </option>
-                      );
-                    })}
+                    {borrowers.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.phone})
+                      </option>
+                    ))}
                   </select>
                 )}
                 {borrowerIdTouched && !isBorrowerValid && (
@@ -613,12 +599,6 @@ export default function Loans() {
                     <AlertCircle size={10} />
                     Borrower profile selection is required.
                   </p>
-                )}
-                {selectedBorrowerHasUnpaidLoan && view === 'add' && (
-                  <div className="p-3.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 text-xs flex items-center gap-2 font-medium mt-2">
-                    <AlertCircle size={16} className="shrink-0 text-rose-400" />
-                    <span>This borrower already has an outstanding loan. New loan cannot be issued until it is fully repaid.</span>
-                  </div>
                 )}
               </div>
             </div>

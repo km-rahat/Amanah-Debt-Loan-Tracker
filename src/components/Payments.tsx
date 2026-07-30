@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Search, 
   CreditCard, 
@@ -33,7 +33,8 @@ import {
   useCreatePaymentMutation, 
   useUpdatePaymentMutation, 
   useDeletePaymentMutation, 
-  useLoansQuery 
+  useLoansQuery,
+  useAgreementsQuery
 } from '../hooks/useSupabaseQueries';
 
 import { useApp } from '../context/AppContext';
@@ -42,13 +43,15 @@ type ViewState = 'list' | 'add' | 'edit' | 'receipt';
 
 export default function Payments() {
   const { formatCurrency: formatCurrencyFromContext } = useApp();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const paramLoanId = searchParams.get('loanId');
   const paramAction = searchParams.get('action');
 
-  // Fetch payments & loans via React Query
+  // Fetch payments, loans & agreements via React Query
   const { data: payments = [], isLoading, isError, error } = usePaymentsQuery();
   const { data: loans = [] } = useLoansQuery();
+  const { data: agreements = [] } = useAgreementsQuery();
 
   // React Query Mutations
   const createPaymentMutation = useCreatePaymentMutation();
@@ -65,13 +68,18 @@ export default function Payments() {
   const [activeFilter, setActiveFilter] = useState<'All' | 'Today' | 'ThisMonth' | 'CompletedLoans' | 'PendingLoans'>('All');
 
   // Toast state
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+    agreementId?: string;
+    loanId?: string;
+  } | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
+  const showToast = (message: string, type: 'success' | 'error', agreementId?: string, loanId?: string) => {
+    setToast({ message, type, agreementId, loanId });
     setTimeout(() => {
       setToast(null);
-    }, 4000);
+    }, 6000);
   };
 
   // Form states
@@ -185,7 +193,13 @@ export default function Payments() {
         notes: notes.trim() || undefined,
       });
 
-      showToast(`Payment of ${formatCurrency(parsedAmount, selectedLoan.currency)} successfully recorded!`, 'success');
+      const relatedAgreement = agreements.find(a => a.loanId === loanId);
+      showToast(
+        `Payment of ${formatCurrency(parsedAmount, selectedLoan.currency)} successfully recorded!`,
+        'success',
+        relatedAgreement?.id,
+        loanId
+      );
       setView('list');
     } catch (err: any) {
       showToast(err.message || 'Failed to create payment record in Supabase.', 'error');
@@ -215,7 +229,13 @@ export default function Payments() {
         },
       });
 
-      showToast(`Payment ${selectedPaymentId} successfully updated!`, 'success');
+      const relatedAgreement = agreements.find(a => a.loanId === loanId);
+      showToast(
+        `Payment ${selectedPaymentId} successfully updated!`,
+        'success',
+        relatedAgreement?.id,
+        loanId
+      );
       setView('list');
     } catch (err: any) {
       showToast(err.message || 'Failed to update payment record in Supabase.', 'error');
@@ -298,6 +318,19 @@ export default function Payments() {
           <div>
             <p className="text-xs font-bold text-white">{toast.type === 'success' ? 'Action Confirmed' : 'Action Failed'}</p>
             <p className="text-[10px] text-slate-400 mt-0.5">{toast.message}</p>
+            {toast.type === 'success' && (toast.agreementId || toast.loanId) && (
+              <button
+                onClick={() => {
+                  const targetId = toast.agreementId || toast.loanId;
+                  navigate(`/agreements?id=${targetId}`);
+                  setToast(null);
+                }}
+                className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+              >
+                <FileSignature size={12} />
+                <span>Agreement updated — View/Download</span>
+              </button>
+            )}
           </div>
           <button onClick={() => setToast(null)} className="ml-2 text-slate-500 hover:text-white transition-colors cursor-pointer">
             <X size={14} />

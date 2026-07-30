@@ -382,19 +382,19 @@ export class AgreementService {
   }): Promise<Agreement | null> {
     try {
       if (!isSupabaseConfigured()) {
-        return null;
+        throw new Error('Supabase is not configured.');
       }
       assertSupabaseSetup();
 
       // 1. Check if an agreement already exists for this loan_id
       const { data: existing, error: checkErr } = await supabase
         .from('agreements')
-        .select('id')
+        .select('*, loans(*, borrowers(*))')
         .eq('loan_id', loan.id);
 
       if (!checkErr && existing && existing.length > 0) {
-        console.log(`Agreement already exists for loan ${loan.id}. Skipping duplicate creation.`);
-        return null;
+        console.log(`[AgreementService.autoGenerateForLoan] Agreement already exists for loan ${loan.id}. Returning existing agreement.`);
+        return this.mapRow(existing[0]);
       }
 
       // 2. Generate agreement number: AG-YYYY-000001
@@ -419,6 +419,8 @@ export class AgreementService {
         remaining_amount: loan.amount || 0,
       };
 
+      console.log('[AgreementService.autoGenerateForLoan] Inserting agreement row into Supabase:', insertPayload);
+
       let agreementRow: any = null;
       const { data, error } = await supabase
         .from('agreements')
@@ -427,7 +429,7 @@ export class AgreementService {
         .single();
 
       if (error) {
-        console.warn('Full agreement insert failed, falling back to base columns:', error.message);
+        console.warn('[AgreementService.autoGenerateForLoan] Full agreement insert failed, attempting base fallback:', error.message);
         const fallbackPayload = {
           loan_id: loan.id,
           status: 'Active',
@@ -438,11 +440,16 @@ export class AgreementService {
           .select('*, loans(*, borrowers(*))')
           .single();
 
-        if (fbError) throw fbError;
+        if (fbError) {
+          console.error('[AgreementService.autoGenerateForLoan] Supabase row insertion failed:', fbError);
+          throw new Error(fbError.message || 'Database insert failed');
+        }
         agreementRow = fbData;
       } else {
         agreementRow = data;
       }
+
+      console.log('[AgreementService.autoGenerateForLoan] Successfully inserted row into Supabase:', agreementRow);
 
       const createdAgreement = this.mapRow(agreementRow);
       createdAgreement.agreementNumber = agreementNumber;
@@ -462,9 +469,9 @@ export class AgreementService {
       });
 
       return createdAgreement;
-    } catch (err) {
-      console.warn('Could not auto-generate agreement for loan:', err);
-      return null;
+    } catch (err: any) {
+      console.error('[AgreementService.autoGenerateForLoan] Error creating agreement:', err);
+      throw err;
     }
   }
 
@@ -589,6 +596,38 @@ export class AgreementService {
 
       if (!updatedRow) {
         return null;
+      }
+
+      // Record a new version snapshot in agreement_versions table
+      try {
+        const { data: currentVersions } = await supabase
+          .from('agreement_versions')
+          .select('id')
+          .eq('agreement_id', agreementRow.id);
+
+        const verCount = (currentVersions || []).length;
+        const newVerStr = `v1.${verCount + 1}`;
+
+        const snapshotData = {
+          agreement_id: agreementRow.id,
+          version: newVerStr,
+          created_date: new Date().toISOString().split('T')[0],
+          content: JSON.stringify({
+            version: newVerStr,
+            updatedAt: new Date().toISOString(),
+            status: status,
+            totalPaid: totalPaid,
+            remainingAmount: remainingAmount,
+            numberOfPayments: numberOfPayments,
+            lastPaymentDate: lastPaymentDate,
+            note: `Payment ledger updated: Paid $${totalPaid}, Remaining $${remainingAmount}`,
+          }),
+        };
+
+        await supabase.from('agreement_versions').insert(snapshotData);
+        console.log(`[AgreementService] Version snapshot ${newVerStr} created for agreement ${agreementRow.id}`);
+      } catch (verErr) {
+        console.warn('[AgreementService] Version snapshot recording note:', verErr);
       }
 
       return this.mapRow(updatedRow);

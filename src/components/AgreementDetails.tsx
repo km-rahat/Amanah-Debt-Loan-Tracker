@@ -18,10 +18,12 @@ import {
   Scale,
   ShieldCheck,
   Lock,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { useAgreementDetailsQuery } from '../hooks/useSupabaseQueries';
 import { useApp } from '../context/AppContext';
+import { generateAgreementPDF, downloadAgreementWithAI } from '../utils/pdfGenerator';
 
 interface AgreementDetailsProps {
   agreementId: string;
@@ -35,6 +37,7 @@ export default function AgreementDetails({ agreementId, onBack }: AgreementDetai
 
   // View state: 'document' (Printable document layout) or 'cards' (Dashboard cards)
   const [activeTab, setActiveTab] = useState<'document' | 'cards'>('document');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   // Currency formatter helper
   const formatCurrency = (val: number, curr?: string) => {
@@ -159,34 +162,34 @@ export default function AgreementDetails({ agreementId, onBack }: AgreementDetai
             </button>
           </div>
 
-          {/* Button 1: Print (disabled) */}
+          {/* Button 1: Print Document */}
           <button
-            disabled
-            className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 px-3.5 py-2 text-2xs font-bold text-slate-500 cursor-not-allowed opacity-60"
-            title="Print (disabled)"
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-2xs font-bold text-slate-200 hover:bg-slate-700 hover:text-white transition-all cursor-pointer"
+            title="Print Document"
           >
             <Printer size={13} />
-            <span>Print (disabled)</span>
+            <span>Print Document</span>
           </button>
 
-          {/* Button 2: Download PDF (disabled) */}
+          {/* Button 2: Download PDF with AI Legal Document */}
           <button
-            disabled
-            className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 px-3.5 py-2 text-2xs font-bold text-slate-500 cursor-not-allowed opacity-60"
-            title="Download PDF (disabled)"
+            disabled={isGeneratingAI || !data}
+            onClick={() => data && downloadAgreementWithAI(data, setIsGeneratingAI)}
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-600 px-3.5 py-2 text-2xs font-bold text-white hover:bg-indigo-500 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+            title="Download Agreement PDF"
           >
-            <Download size={13} />
-            <span>Download PDF (disabled)</span>
-          </button>
-
-          {/* Button 3: Share (disabled) */}
-          <button
-            disabled
-            className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/40 px-3.5 py-2 text-2xs font-bold text-slate-500 cursor-not-allowed opacity-60"
-            title="Share (disabled)"
-          >
-            <Share2 size={13} />
-            <span>Share (disabled)</span>
+            {isGeneratingAI ? (
+              <>
+                <Loader2 size={13} className="animate-spin text-white" />
+                <span>Generating document...</span>
+              </>
+            ) : (
+              <>
+                <Download size={13} />
+                <span>Download PDF</span>
+              </>
+            )}
           </button>
         </div>
       </div>
