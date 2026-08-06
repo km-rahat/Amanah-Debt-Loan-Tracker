@@ -323,8 +323,9 @@ export class AgreementService {
 
   /**
    * Automatically generates an agreement number formatted like AG-YYYY-000001
+   * Supports an extra offset/randomizer to prevent race conditions during rapid calls
    */
-  static async generateAgreementNumber(): Promise<string> {
+  static async generateAgreementNumber(extraOffset = 0): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `AG-${year}-`;
     try {
@@ -337,16 +338,9 @@ export class AgreementService {
       if (data && data.length > 0) {
         for (const row of data) {
           if (row.agreement_number && typeof row.agreement_number === 'string') {
-            if (row.agreement_number.startsWith(prefix)) {
-              const seqStr = row.agreement_number.substring(prefix.length);
-              const seq = parseInt(seqStr, 10);
-              if (!isNaN(seq) && seq > maxSeq) {
-                maxSeq = seq;
-              }
-            } else if (row.agreement_number.startsWith('AG-')) {
-              const parts = row.agreement_number.split('-');
-              const seqStr = parts[parts.length - 1];
-              const seq = parseInt(seqStr, 10);
+            const numPart = row.agreement_number.replace(/[^0-9]/g, '');
+            if (numPart) {
+              const seq = parseInt(numPart.slice(-6), 10);
               if (!isNaN(seq) && seq > maxSeq) {
                 maxSeq = seq;
               }
@@ -358,18 +352,23 @@ export class AgreementService {
         }
       }
 
-      const nextSeq = maxSeq + 1;
+      const nextSeq = maxSeq + 1 + extraOffset;
+      // Add a 2-digit random suffix if extraOffset > 0 to ensure uniqueness under race conditions
+      if (extraOffset > 0) {
+        const rand = Math.floor(10 + Math.random() * 90);
+        return `${prefix}${String(nextSeq).padStart(5, '0')}-${rand}`;
+      }
       return `${prefix}${String(nextSeq).padStart(6, '0')}`;
     } catch (err) {
-      console.warn('Could not query existing agreement numbers, using default:', err);
-      return `${prefix}000001`;
+      console.warn('Could not query existing agreement numbers, using timestamp default:', err);
+      const timeMs = Date.now().toString().slice(-6);
+      return `${prefix}${timeMs}`;
     }
   }
 
   /**
    * Automatically creates a single agreement for a loan if one does not already exist.
-   * Format: AG-YYYY-000001
-   * Saves: loan_id, agreement_number, current_version=1, status="Active", total_paid=0, remaining_amount=loan_amount, created_at
+   * Retries up to 3 times if race conditions or unique constraint collisions occur.
    */
   static async autoGenerateForLoan(loan: {
     id: string;
@@ -397,71 +396,94 @@ export class AgreementService {
         return this.mapRow(existing[0]);
       }
 
-      // 2. Generate agreement number: AG-YYYY-000001
-      const agreementNumber = await this.generateAgreementNumber();
-
-      // 3. Prepare payload matching requirements
-      const insertPayload: any = {
-        loan_id: loan.id,
-        borrower_id: loan.borrowerId || null,
-        borrower_name: loan.borrowerName || 'Unknown Borrower',
-        loan_amount: loan.amount || 0,
-        purpose: loan.purpose || '',
-        loan_date: loan.loanDate || new Date().toISOString().split('T')[0],
-        due_date: loan.dueDate || new Date().toISOString().split('T')[0],
-        agreement_number: agreementNumber,
-        version: '1',
-        status: 'Active',
-        created_at: new Date().toISOString(),
-        created_date: new Date().toISOString().split('T')[0],
-        current_version: 1,
-        total_paid: 0,
-        remaining_amount: loan.amount || 0,
-      };
-
-      console.log('[AgreementService.autoGenerateForLoan] Inserting agreement row into Supabase:', insertPayload);
-
       let agreementRow: any = null;
-      const { data, error } = await supabase
-        .from('agreements')
-        .insert(insertPayload)
-        .select('*, loans(*, borrowers(*))')
-        .single();
+      let finalAgreementNumber = '';
+      let lastInsertError: any = null;
 
-      if (error) {
-        console.warn('[AgreementService.autoGenerateForLoan] Full agreement insert failed, attempting base fallback:', error.message);
+      // 2. Retry loop (3 attempts) to handle potential race condition / duplicate agreement numbers
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const agreementNumber = await this.generateAgreementNumber(attempt);
+        finalAgreementNumber = agreementNumber;
+
+        const insertPayload: any = {
+          loan_id: loan.id,
+          borrower_id: loan.borrowerId || null,
+          borrower_name: loan.borrowerName || 'Unknown Borrower',
+          loan_amount: loan.amount || 0,
+          purpose: loan.purpose || '',
+          loan_date: loan.loanDate || new Date().toISOString().split('T')[0],
+          due_date: loan.dueDate || new Date().toISOString().split('T')[0],
+          agreement_number: agreementNumber,
+          version: '1',
+          status: 'Active',
+          created_at: new Date().toISOString(),
+          created_date: new Date().toISOString().split('T')[0],
+          current_version: 1,
+          total_paid: 0,
+          remaining_amount: loan.amount || 0,
+        };
+
+        console.log(`[AgreementService.autoGenerateForLoan] Attempt ${attempt + 1}: Inserting agreement:`, agreementNumber);
+
+        const { data, error } = await supabase
+          .from('agreements')
+          .insert(insertPayload)
+          .select('*, loans(*, borrowers(*))')
+          .single();
+
+        if (!error && data) {
+          agreementRow = data;
+          break; // Success!
+        }
+
+        lastInsertError = error;
+        console.warn(`[AgreementService.autoGenerateForLoan] Insert attempt ${attempt + 1} failed (${error?.message}). Attempting fallback payload...`);
+
+        // Attempt fallback insert with REQUIRED agreement_number included
         const fallbackPayload = {
           loan_id: loan.id,
+          agreement_number: agreementNumber,
+          borrower_name: loan.borrowerName || 'Unknown Borrower',
+          loan_amount: loan.amount || 0,
           status: 'Active',
+          total_paid: 0,
+          remaining_amount: loan.amount || 0,
         };
+
         const { data: fbData, error: fbError } = await supabase
           .from('agreements')
           .insert(fallbackPayload)
           .select('*, loans(*, borrowers(*))')
           .single();
 
-        if (fbError) {
-          console.error('[AgreementService.autoGenerateForLoan] Supabase row insertion failed:', fbError);
-          throw new Error(fbError.message || 'Database insert failed');
+        if (!fbError && fbData) {
+          agreementRow = fbData;
+          break; // Fallback succeeded!
         }
-        agreementRow = fbData;
-      } else {
-        agreementRow = data;
+
+        lastInsertError = fbError || error;
       }
 
-      console.log('[AgreementService.autoGenerateForLoan] Successfully inserted row into Supabase:', agreementRow);
+      if (!agreementRow) {
+        console.error('[AgreementService.autoGenerateForLoan] All insert attempts failed:', lastInsertError);
+        throw new Error(lastInsertError?.message || 'Failed to insert agreement into database after retries');
+      }
+
+      console.log('[AgreementService.autoGenerateForLoan] Successfully created agreement row:', agreementRow);
 
       const createdAgreement = this.mapRow(agreementRow);
-      createdAgreement.agreementNumber = agreementNumber;
+      if (!createdAgreement.agreementNumber) {
+        createdAgreement.agreementNumber = finalAgreementNumber;
+      }
 
-      // 4. Create timeline event: Agreement Generated
+      // 3. Create timeline event: Agreement Generated
       await TimelineService.addTimelineEvent({
         loanId: loan.id,
         eventType: 'Agreement Generated',
         title: 'Agreement Generated',
-        description: `Official agreement ${agreementNumber} generated for ${loan.borrowerName} (Loan Amount: $${(loan.amount || 0).toLocaleString()}).`,
+        description: `Official agreement ${finalAgreementNumber} generated for ${loan.borrowerName} (Loan Amount: $${(loan.amount || 0).toLocaleString()}).`,
         metadata: {
-          agreementNumber,
+          agreementNumber: finalAgreementNumber,
           loanId: loan.id,
           loanAmount: loan.amount,
           status: 'Active',

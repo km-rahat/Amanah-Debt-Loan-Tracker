@@ -181,6 +181,25 @@ export const generateAgreementPDF = (data: AgreementDetailsData, aiLegalText?: s
 
   y += 28;
 
+  // --- FULLY REPAID STAMP BANNER ---
+  if (financialSummary.remainingAmount === 0 || financialSummary.agreementStatus === 'Completed' || financialSummary.agreementStatus === 'Fully Paid') {
+    doc.setFillColor(209, 250, 229); // emerald-100
+    doc.setDrawColor(52, 211, 153); // emerald-400
+    doc.roundedRect(15, y, 180, 14, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(6, 95, 70); // emerald-800
+    doc.text('DEBT SATISFACTION STAMP: FULLY REPAID & SETTLED', pageWidth / 2, y + 5.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const settleDate = financialSummary.settlementDate || new Date().toISOString().split('T')[0];
+    doc.text(`This loan has been FULLY REPAID as of ${settleDate}. No outstanding balance remains.`, pageWidth / 2, y + 10.5, { align: 'center' });
+
+    y += 18;
+  }
+
   // --- AI LEGAL BODY TEXT OR STANDARD TERMS ---
   if (aiLegalText) {
     checkPageBreak(30);

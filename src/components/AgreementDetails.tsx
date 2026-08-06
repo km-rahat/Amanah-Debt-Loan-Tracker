@@ -396,6 +396,19 @@ export default function AgreementDetails({ agreementId, onBack }: AgreementDetai
                   </span>
                 </div>
               </div>
+
+              {/* FULLY REPAID STAMP BANNER */}
+              {(financialSummary.remainingAmount === 0 || financialSummary.agreementStatus === 'Completed' || financialSummary.agreementStatus === 'Fully Paid') && (
+                <div className="p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-center space-y-1 my-2">
+                  <div className="flex items-center justify-center gap-2 text-emerald-800 font-bold text-xs uppercase tracking-wider">
+                    <ShieldCheck size={18} className="text-emerald-600" />
+                    <span>DEBT SATISFACTION STAMP: FULLY REPAID & SETTLED</span>
+                  </div>
+                  <p className="text-2xs text-emerald-900 font-medium">
+                    This loan has been FULLY REPAID as of {financialSummary.settlementDate || new Date().toISOString().split('T')[0]}. No outstanding balance remains.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* SECTION 6: PAYMENT LEDGER TABLE (Dynamic - Newest First) */}

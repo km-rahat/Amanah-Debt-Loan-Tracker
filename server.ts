@@ -60,6 +60,8 @@ async function startServer() {
           ).join('\n')
         : 'No payments recorded to date.';
 
+      const isFullyPaid = remainingAmount <= 0 || (loanAmount > 0 && totalPaid >= loanAmount);
+
       const prompt = `
 Draft a comprehensive, formal, binding Legal Loan Agreement / Promissory Note document based on the following verified financial records:
 
@@ -73,6 +75,7 @@ Draft a comprehensive, formal, binding Legal Loan Agreement / Promissory Note do
 - Agreed Repayment Due Date: ${dueDate}
 - Total Amount Repaid to Date: ${currency} ${totalPaid}
 - Current Outstanding Balance Remaining: ${currency} ${remainingAmount}
+- Current Loan Lifecycle Status: ${isFullyPaid ? 'COMPLETED / FULLY REPAID' : totalPaid > 0 ? 'PARTIALLY PAID' : 'ACTIVE / DISBURSED'}
 
 Verified Payment History Ledger:
 ${formattedPayments}
@@ -81,7 +84,9 @@ Instructions for Document Drafting:
 1. Write in a formal, authoritative, legally binding tone suitable for court submission or formal notarization.
 2. Divide the text into clear numbered sections (e.g., SECTION 1: COVENANT OF DEBT, SECTION 2: REPAYMENT SCHEDULE & LIVE LEDGER, SECTION 3: DEFAULT AND LEGAL REMEDIES, SECTION 4: GOVERNING LAW AND ACKNOWLEDGMENT).
 3. Explicitly document the original loan, total repayments received so far, and the exact remaining balance owed by the borrower.
-4. Include standard clauses for default, interest-free Islamic debt rules (Amanah compliance), prompt repayment obligation, and mutual legal acknowledgment.
+4. ${isFullyPaid 
+    ? 'CRITICAL REPAYMENT CLAUSE: This loan has been FULLY REPAID in full. You MUST include a prominent, explicit DEBT SATISFACTION DECLARATION section stating: "This loan has been FULLY REPAID as of the final payment date. No outstanding balance remains, and the debtor is hereby fully released from all debt obligations under this covenant."'
+    : 'Include standard clauses for default, interest-free Islamic debt rules (Amanah compliance), prompt repayment obligation, and mutual legal acknowledgment.'}
 5. Output ONLY plain text suitable for direct insertion into a PDF document. Do NOT use markdown code blocks (\`\`\`), HTML, or formatting symbols that look raw.
 `;
 

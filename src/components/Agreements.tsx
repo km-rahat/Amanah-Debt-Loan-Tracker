@@ -48,11 +48,11 @@ export default function Agreements() {
   const [downloadingAgrId, setDownloadingAgrId] = useState<string | null>(null);
 
   // Toasts
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
-  const triggerToast = (msg: string, type: 'success' | 'info' = 'success') => {
+  const triggerToast = (msg: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message: msg, type });
-    setTimeout(() => setToast(null), 3500);
+    setTimeout(() => setToast(null), 4500);
   };
 
   // Sync URL parameters to component view state
@@ -95,7 +95,7 @@ export default function Agreements() {
       }
     } catch (err: any) {
       console.error('[Agreements] Error generating missing agreement:', err);
-      triggerToast(`Error generating missing agreement: ${err?.message || 'Database error'}`, 'info');
+      triggerToast(`Error generating missing agreement: ${err?.message || 'Database error'}`, 'error');
     } finally {
       setGeneratingLoanId(null);
     }
@@ -111,11 +111,11 @@ export default function Agreements() {
         await downloadAgreementWithAI(details);
         triggerToast(`Agreement document downloaded successfully!`, 'success');
       } else {
-        triggerToast(`Could not load agreement details for PDF generation.`, 'info');
+        triggerToast(`Could not load agreement details for PDF generation.`, 'error');
       }
     } catch (err: any) {
       console.error('PDF generation error:', err);
-      triggerToast(`Failed to generate PDF document: ${err?.message || 'Download error'}`, 'info');
+      triggerToast(`Failed to generate PDF document: ${err?.message || 'Download error'}`, 'error');
     } finally {
       setDownloadingAgrId(null);
     }
@@ -156,12 +156,36 @@ export default function Agreements() {
       
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 rounded-2xl border border-slate-800 bg-[#161619] p-4 shadow-2xl animate-fade-in-up">
-          <div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-400">
-            <Check size={18} />
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 rounded-2xl border bg-[#161619] p-4 shadow-2xl animate-fade-in-up ${
+          toast.type === 'error'
+            ? 'border-rose-500/40 text-rose-400'
+            : toast.type === 'info'
+            ? 'border-indigo-500/40 text-indigo-400'
+            : 'border-emerald-500/40 text-emerald-400'
+        }`}>
+          <div className={`rounded-xl p-2 ${
+            toast.type === 'error'
+              ? 'bg-rose-500/10 text-rose-400'
+              : toast.type === 'info'
+              ? 'bg-indigo-500/10 text-indigo-400'
+              : 'bg-emerald-500/10 text-emerald-400'
+          }`}>
+            {toast.type === 'error' ? (
+              <AlertCircle size={18} />
+            ) : toast.type === 'info' ? (
+              <AlertCircle size={18} />
+            ) : (
+              <Check size={18} />
+            )}
           </div>
           <div>
-            <p className="text-xs font-bold text-white">Action Confirmed</p>
+            <p className="text-xs font-bold text-white">
+              {toast.type === 'error'
+                ? 'Action Failed'
+                : toast.type === 'info'
+                ? 'Notice'
+                : 'Action Confirmed'}
+            </p>
             <p className="text-[10px] text-slate-400 mt-0.5">{toast.message}</p>
           </div>
         </div>
