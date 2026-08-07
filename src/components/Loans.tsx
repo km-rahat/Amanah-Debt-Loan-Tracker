@@ -23,7 +23,8 @@ import {
   FileCheck2,
   ChevronRight,
   Plus,
-  CoinsIcon
+  CoinsIcon,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Loan, Borrower } from '../types';
@@ -97,6 +98,16 @@ export default function Loans() {
   const isDueDateValid = dueDate !== '' && (loanDate === '' || new Date(dueDate) >= new Date(loanDate));
 
   const isFormValid = isBorrowerValid && isAmountValid && isPurposeValid && isLoanDateValid && isDueDateValid;
+
+  // Check if current editing loan has payments recorded against it
+  const editingLoan = view === 'edit' && selectedLoanId ? loans.find(l => l.id === selectedLoanId) : null;
+  const hasPaymentsForEditingLoan = Boolean(
+    editingLoan && (
+      payments.some(p => p.loanId === editingLoan.id) ||
+      editingLoan.remainingAmount < editingLoan.amount ||
+      ['Partially Paid', 'Completed', 'Fully Paid'].includes(editingLoan.status)
+    )
+  );
 
   // Clear states when transitioning
   const handleOpenAdd = () => {
@@ -187,15 +198,26 @@ export default function Loans() {
 
     if (!isFormValid || !selectedLoanId) return;
 
-    const selectedBorrower = borrowers.find(b => b.id === borrowerId);
+    const currentLoan = loans.find(l => l.id === selectedLoanId);
+    if (!currentLoan) return;
+
+    const paymentsExist = payments.some(p => p.loanId === currentLoan.id) ||
+      currentLoan.remainingAmount < currentLoan.amount ||
+      ['Partially Paid', 'Completed', 'Fully Paid'].includes(currentLoan.status);
+
+    // If payments exist, lock borrowerId and amount to current values
+    const finalBorrowerId = paymentsExist ? currentLoan.borrowerId : borrowerId;
+    const finalAmount = paymentsExist ? currentLoan.amount : parseFloat(amount);
+
+    const selectedBorrower = borrowers.find(b => b.id === finalBorrowerId);
     if (!selectedBorrower) return;
 
     updateLoanMutation.mutate({
       id: selectedLoanId,
       updated: {
-        borrowerId,
+        borrowerId: finalBorrowerId,
         borrowerName: selectedBorrower.name,
-        amount: parseFloat(amount),
+        amount: finalAmount,
         purpose: purpose.trim(),
         loanDate,
         dueDate,
@@ -214,7 +236,7 @@ export default function Loans() {
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to permanently remove loan agreement ${id} for ${name}? This will adjust borrower total statistics.`)) {
+    if (confirm(`Are you sure you want to remove loan record ${id} for ${name}? This record will be removed from your active list. It will not be permanently erased.`)) {
       deleteLoanMutation.mutate(id, {
         onSuccess: () => {
           showToast('Loan deleted successfully', 'success');
@@ -575,12 +597,13 @@ export default function Loans() {
                 ) : (
                   <select
                     value={borrowerId}
+                    disabled={view === 'edit' && hasPaymentsForEditingLoan}
                     onChange={(e) => {
                       setBorrowerId(e.target.value);
                       setBorrowerIdTouched(true);
                     }}
                     onBlur={() => setBorrowerIdTouched(true)}
-                    className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-2 bg-slate-950 text-white ${
+                    className={`w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-2 bg-slate-950 text-white disabled:bg-slate-900/90 disabled:text-slate-400 disabled:border-slate-800 disabled:cursor-not-allowed ${
                       borrowerIdTouched && !isBorrowerValid
                         ? 'border-rose-500/50 focus:ring-rose-500/20 focus:border-rose-500'
                         : 'border-slate-800 focus:ring-indigo-500/15 focus:border-indigo-600'
@@ -594,7 +617,13 @@ export default function Loans() {
                     ))}
                   </select>
                 )}
-                {borrowerIdTouched && !isBorrowerValid && (
+                {view === 'edit' && hasPaymentsForEditingLoan && (
+                  <p className="text-amber-400 text-[11px] flex items-center gap-1.5 mt-1.5 font-medium bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg">
+                    <Lock size={12} className="shrink-0 text-amber-400" />
+                    <span>Borrower profile is locked because payments have been recorded against this loan.</span>
+                  </p>
+                )}
+                {borrowerIdTouched && !isBorrowerValid && !(view === 'edit' && hasPaymentsForEditingLoan) && (
                   <p className="text-rose-400 text-[10px] flex items-center gap-1 mt-1">
                     <AlertCircle size={10} />
                     Borrower profile selection is required.
@@ -620,20 +649,27 @@ export default function Loans() {
                     <input
                       type="number"
                       value={amount}
+                      disabled={view === 'edit' && hasPaymentsForEditingLoan}
                       onChange={(e) => {
                         setAmount(e.target.value);
                         setAmountTouched(true);
                       }}
                       onBlur={() => setAmountTouched(true)}
                       placeholder="e.g. 50000"
-                      className={`w-full pl-7 pr-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-2 bg-slate-950 text-white font-mono ${
+                      className={`w-full pl-7 pr-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-2 bg-slate-950 text-white font-mono disabled:bg-slate-900/90 disabled:text-slate-400 disabled:border-slate-800 disabled:cursor-not-allowed ${
                         amountTouched && !isAmountValid
                           ? 'border-rose-500/50 focus:ring-rose-500/20 focus:border-rose-500'
                           : 'border-slate-800 focus:ring-indigo-500/15 focus:border-indigo-600'
                       }`}
                     />
                   </div>
-                  {amountTouched && !isAmountValid && (
+                  {view === 'edit' && hasPaymentsForEditingLoan && (
+                    <p className="text-amber-400 text-[11px] flex items-center gap-1.5 mt-1.5 font-medium bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg">
+                      <Lock size={12} className="shrink-0 text-amber-400" />
+                      <span>Amount is locked because payments have been recorded against this loan.</span>
+                    </p>
+                  )}
+                  {amountTouched && !isAmountValid && !(view === 'edit' && hasPaymentsForEditingLoan) && (
                     <p className="text-rose-400 text-[10px] flex items-center gap-1 mt-1">
                       <AlertCircle size={10} />
                       Amount must be greater than zero.

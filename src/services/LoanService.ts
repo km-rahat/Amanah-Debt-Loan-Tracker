@@ -23,7 +23,8 @@ export class LoanService {
 
     let remainingAmount: number;
     if (Array.isArray(row.payments)) {
-      const totalPaid = row.payments.reduce((sum: number, p: any) => sum + Number(p.payment_amount ?? 0), 0);
+      const activePayments = row.payments.filter((p: any) => !p.is_deleted);
+      const totalPaid = activePayments.reduce((sum: number, p: any) => sum + Number(p.payment_amount ?? 0), 0);
       remainingAmount = Math.max(0, Math.round((loanAmount - totalPaid) * 100) / 100);
     } else if (row.remaining_amount !== undefined && row.remaining_amount !== null) {
       remainingAmount = Math.max(0, Number(row.remaining_amount));
@@ -89,6 +90,7 @@ export class LoanService {
       const { data, error } = await supabase
         .from('loans')
         .select('*, borrowers(full_name), payments(payment_amount)')
+        .eq('is_deleted', false)
         .order('loan_date', { ascending: false });
 
       if (error) {
@@ -96,12 +98,14 @@ export class LoanService {
         const { data: fbData, error: fbErr } = await supabase
           .from('loans')
           .select('*, borrowers(full_name)')
+          .eq('is_deleted', false)
           .order('loan_date', { ascending: false });
         if (fbErr) throw fbErr;
 
         const { data: allPayments } = await supabase
           .from('payments')
-          .select('loan_id, payment_amount');
+          .select('loan_id, payment_amount')
+          .eq('is_deleted', false);
 
         const paymentsByLoanId: Record<string, any[]> = {};
         (allPayments || []).forEach((p: any) => {
@@ -145,7 +149,8 @@ export class LoanService {
         const { data: loanPayments } = await supabase
           .from('payments')
           .select('payment_amount')
-          .eq('loan_id', id);
+          .eq('loan_id', id)
+          .eq('is_deleted', false);
 
         return this.mapRow({
           ...fbData,
@@ -215,6 +220,46 @@ export class LoanService {
   static async update(id: string, updated: Partial<Loan>): Promise<Loan> {
     try {
       assertSupabaseSetup();
+
+      // Query existing loan record with non-deleted payments to check active payments ledger
+      const { data: existing, error: fetchError } = await supabase
+        .from('loans')
+        .select('*, payments(*)')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !existing) {
+        throw new LoanError(`Loan with ID ${id} not found.`);
+      }
+
+      const activePayments = Array.isArray(existing.payments)
+        ? existing.payments.filter((p: any) => !p.is_deleted)
+        : [];
+      const totalPaid = activePayments.reduce((sum: number, p: any) => sum + Number(p.payment_amount ?? 0), 0);
+      const hasPayments = activePayments.length > 0 || totalPaid > 0;
+
+      // 1. SECURITY CHECK: If payments have been recorded, block changes to principal loan amount or borrower
+      if (hasPayments) {
+        const currentAmount = Number(existing.loan_amount ?? existing.amount ?? 0);
+        const newAmount = updated.amount !== undefined ? Number(updated.amount) : undefined;
+        const isAmountChanged = newAmount !== undefined && Math.abs(newAmount - currentAmount) > 0.01;
+
+        const currentBorrowerId = existing.borrower_id;
+        const newBorrowerId = updated.borrowerId;
+        const isBorrowerChanged = newBorrowerId !== undefined && newBorrowerId !== currentBorrowerId;
+
+        if (isAmountChanged || isBorrowerChanged) {
+          throw new LoanError(
+            'Loan amount cannot be changed after payments have been made. This protects the integrity of the payment ledger and agreement.'
+          );
+        }
+      } else {
+        // 2. VALIDATION CHECK: If no payments exist, amount can be updated but must be > 0
+        if (updated.amount !== undefined && Number(updated.amount) <= 0) {
+          throw new LoanError('Loan amount must be greater than zero.');
+        }
+      }
+
       const dbData = this.mapToDb(updated);
       const { data, error } = await supabase
         .from('loans')
@@ -225,6 +270,14 @@ export class LoanService {
 
       if (error) throw error;
       const updatedLoan = this.mapRow(data);
+
+      // Recalculate balance and sync agreement financial summary if amount was updated
+      try {
+        await PaymentService.recalculateLoanBalance(updatedLoan.id);
+        await AgreementService.updateAgreementFinancialSummary(updatedLoan.id);
+      } catch (syncErr) {
+        console.warn('[LoanService.update] Balance/Agreement sync warning:', syncErr);
+      }
 
       // Automatically record timeline event
       await TimelineService.addTimelineEvent({
@@ -246,6 +299,7 @@ export class LoanService {
 
       return updatedLoan;
     } catch (err) {
+      if (err instanceof LoanError) throw err;
       throw handleDbError(err);
     }
   }
@@ -258,7 +312,10 @@ export class LoanService {
       assertSupabaseSetup();
       const { error } = await supabase
         .from('loans')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
         .eq('id', id);
 
       if (error) throw error;

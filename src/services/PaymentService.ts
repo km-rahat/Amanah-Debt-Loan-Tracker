@@ -16,7 +16,8 @@ export class PaymentService {
       assertSupabaseSetup();
       const { data, error } = await supabase
         .from('payments')
-        .select('receipt_number');
+        .select('receipt_number')
+        .eq('is_deleted', false);
 
       if (!error && data) {
         let maxSeq = 0;
@@ -113,7 +114,8 @@ export class PaymentService {
     const { data: payments, error: payErr } = await supabase
       .from('payments')
       .select('payment_amount')
-      .eq('loan_id', loanId);
+      .eq('loan_id', loanId)
+      .eq('is_deleted', false);
 
     if (payErr) {
       console.warn(`[PaymentService.recalculateLoanBalance] Error fetching payments for loan ${loanId}:`, payErr.message);
@@ -204,6 +206,7 @@ export class PaymentService {
       const { data, error } = await supabase
         .from('payments')
         .select('*, loans(borrowers(full_name))')
+        .eq('is_deleted', false)
         .order('payment_date', { ascending: false });
 
       if (error) {
@@ -211,6 +214,7 @@ export class PaymentService {
         const { data: fbData, error: fbErr } = await supabase
           .from('payments')
           .select('*')
+          .eq('is_deleted', false)
           .order('payment_date', { ascending: false });
 
         if (fbErr) throw fbErr;
@@ -286,7 +290,8 @@ export class PaymentService {
       const { data: existingPayments, error: payErr } = await supabase
         .from('payments')
         .select('payment_amount')
-        .eq('loan_id', payment.loanId);
+        .eq('loan_id', payment.loanId)
+        .eq('is_deleted', false);
 
       // FAIL-SAFE / FAIL-CLOSED CHECK:
       // If fetching existing payments produces an error, REJECT immediately with explicit required message.
@@ -378,7 +383,8 @@ export class PaymentService {
       const { data: verifyPayments, error: verifyErr } = await supabase
         .from('payments')
         .select('id, payment_amount')
-        .eq('loan_id', payment.loanId);
+        .eq('loan_id', payment.loanId)
+        .eq('is_deleted', false);
 
       if (verifyErr || !verifyPayments) {
         if (insertedRow?.id) {
@@ -470,7 +476,8 @@ export class PaymentService {
           .from('payments')
           .select('id, payment_amount')
           .eq('loan_id', targetLoanId)
-          .neq('id', id);
+          .neq('id', id)
+          .eq('is_deleted', false);
 
         if (payErr || !otherPayments) {
           console.error('[PaymentService.update] Error reading existing payments:', payErr?.message);
@@ -559,7 +566,10 @@ export class PaymentService {
 
       const { error } = await supabase
         .from('payments')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
         .eq('id', id);
 
       if (error) throw handleDbError(error);

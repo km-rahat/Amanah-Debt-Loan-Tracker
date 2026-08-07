@@ -83,6 +83,7 @@ export class AgreementService {
       const { data: agData, error: agError } = await supabase
         .from('agreements')
         .select('*, loans(*, borrowers(*))')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
 
       if (agError) throw agError;
@@ -303,16 +304,12 @@ export class AgreementService {
   static async delete(id: string): Promise<void> {
     try {
       assertSupabaseSetup();
-      // agreement_versions is foreign-keyed to agreements with cascade delete ideally,
-      // but let's delete versions first to be robust.
-      await supabase
-        .from('agreement_versions')
-        .delete()
-        .eq('agreement_id', id);
-
       const { error } = await supabase
         .from('agreements')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
         .eq('id', id);
 
       if (error) throw error;
@@ -537,6 +534,7 @@ export class AgreementService {
         .from('payments')
         .select('*')
         .eq('loan_id', loanId)
+        .eq('is_deleted', false)
         .order('payment_date', { ascending: false });
 
       if (payErr) {
@@ -688,7 +686,8 @@ export class AgreementService {
       if (!agreementRow) {
         const { data: allAgreements } = await supabase
           .from('agreements')
-          .select('*, loans(*, borrowers(*))');
+          .select('*, loans(*, borrowers(*))')
+          .eq('is_deleted', false);
         if (allAgreements && allAgreements.length > 0) {
           agreementRow = allAgreements.find(
             (a: any) =>
@@ -724,6 +723,7 @@ export class AgreementService {
           .from('payments')
           .select('*, loans(borrowers(full_name))')
           .eq('loan_id', loanId)
+          .eq('is_deleted', false)
           .order('payment_date', { ascending: true }); // Chronological for running balance
 
         paymentsData = pData || [];

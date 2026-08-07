@@ -176,7 +176,7 @@ export default function Borrowers() {
 
   // Handle Soft Delete
   const handleDelete = (borrowerId: string, name: string) => {
-    if (confirm(`Are you sure you want to permanently remove the borrower profile for: ${name}? This action cannot be undone.`)) {
+    if (confirm(`Are you sure you want to remove borrower profile: ${name}? This record will be removed from your active list. It will not be permanently erased.`)) {
       deleteBorrowerMutation.mutate(borrowerId, {
         onSuccess: () => {
           showToast('Borrower deleted successfully', 'success');

@@ -7,13 +7,15 @@ export class BorrowerService {
    * Maps database snake_case row to camelCase React UI interface.
    */
   static mapRow(row: any): Borrower {
-    const loans = row.loans || [];
+    const rawLoans = row.loans || [];
+    const loans = rawLoans.filter((l: any) => !l.is_deleted);
     const totalLoans = loans.length;
     const pendingAmount = loans.reduce((sum: number, l: any) => {
       const loanAmount = Number(l.loan_amount ?? l.amount ?? 0);
       let rem: number;
       if (Array.isArray(l.payments)) {
-        const totalPaid = l.payments.reduce((s: number, p: any) => s + Number(p.payment_amount ?? 0), 0);
+        const validPayments = l.payments.filter((p: any) => !p.is_deleted);
+        const totalPaid = validPayments.reduce((s: number, p: any) => s + Number(p.payment_amount ?? 0), 0);
         rem = Math.max(0, Math.round((loanAmount - totalPaid) * 100) / 100);
       } else if (l.remaining_amount !== undefined && l.remaining_amount !== null) {
         rem = Math.max(0, Number(l.remaining_amount));
@@ -66,6 +68,7 @@ export class BorrowerService {
       const { data, error } = await supabase
         .from('borrowers')
         .select('*, loans(*, payments(payment_amount))')
+        .eq('is_deleted', false)
         .order('full_name', { ascending: true });
 
       if (error) {
@@ -73,12 +76,14 @@ export class BorrowerService {
         const { data: fbData, error: fbErr } = await supabase
           .from('borrowers')
           .select('*')
+          .eq('is_deleted', false)
           .order('full_name', { ascending: true });
         if (fbErr) throw fbErr;
 
         const { data: allLoans } = await supabase
           .from('loans')
-          .select('*, payments(payment_amount)');
+          .select('*, payments(payment_amount)')
+          .eq('is_deleted', false);
 
         const loansByBorrowerId: Record<string, any[]> = {};
         (allLoans || []).forEach((l: any) => {
@@ -199,7 +204,10 @@ export class BorrowerService {
       assertSupabaseSetup();
       const { error } = await supabase
         .from('borrowers')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+        })
         .eq('id', id);
 
       if (error) throw error;

@@ -244,7 +244,7 @@ export default function Payments() {
 
   // Handle Delete with verification
   const handleDelete = async (id: string, name: string, amt: number) => {
-    if (confirm(`Are you sure you want to permanently reverse payment transaction ${id} of ${formatCurrency(amt)}? This will restore the client outstanding balance.`)) {
+    if (confirm(`Are you sure you want to reverse payment transaction ${id} of ${formatCurrency(amt)}? This record will be removed from your active list. It will not be permanently erased.`)) {
       try {
         await deletePaymentMutation.mutateAsync(id);
         showToast(`Payment transaction ${id} successfully reversed!`, 'success');
