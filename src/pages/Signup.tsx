@@ -199,7 +199,8 @@ export default function Signup() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="John Doe"
+                  placeholder="Enter your name"
+                  autoComplete="off"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 bg-white dark:bg-slate-950 dark:border-slate-800 dark:text-white transition-all"
                   id="signup-fullname-input"
                 />
