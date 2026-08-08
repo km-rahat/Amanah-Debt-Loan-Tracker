@@ -24,8 +24,7 @@ export default function Login() {
   const lightConeRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<SVGGElement>(null);
   const bulbRef = useRef<SVGCircleElement>(null);
-  const cordRef = useRef<SVGLineElement>(null);
-  const pullRef = useRef<SVGCircleElement>(null);
+  const pullGroupRef = useRef<SVGGElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
 
   // Auto-redirect if already logged in
@@ -51,12 +50,12 @@ export default function Login() {
     if (nextState) {
       // TURNING ON
       // 1. Pull cord animation (stretch down & elastic bounce)
-      tl.to([cordRef.current, pullRef.current], {
+      tl.to(pullGroupRef.current, {
         y: 16,
         duration: 0.12,
         ease: 'power1.in',
       });
-      tl.to([cordRef.current, pullRef.current], {
+      tl.to(pullGroupRef.current, {
         y: 0,
         duration: 0.45,
         ease: 'elastic.out(1, 0.4)',
@@ -136,12 +135,12 @@ export default function Login() {
     } else {
       // TURNING OFF
       // 1. Pull cord animation (stretch down & elastic bounce)
-      tl.to([cordRef.current, pullRef.current], {
+      tl.to(pullGroupRef.current, {
         y: 16,
         duration: 0.12,
         ease: 'power1.in',
       });
-      tl.to([cordRef.current, pullRef.current], {
+      tl.to(pullGroupRef.current, {
         y: 0,
         duration: 0.45,
         ease: 'elastic.out(1, 0.4)',
@@ -315,29 +314,28 @@ export default function Login() {
             {/* Stand */}
             <rect x="71" y="68" width="8" height="85" rx="4" fill="#232323" />
 
-            {/* Pull Cord & Knob */}
-            <line
-              ref={cordRef}
-              id="cord"
-              x1="92"
-              y1="68"
-              x2="92"
-              y2="114"
-              stroke="#5a5a5a"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-            <circle
-              ref={pullRef}
-              id="pull"
-              cx="92"
-              cy="118"
-              r="5"
-              fill="#c9a24a"
-              stroke="#8c6a23"
-              strokeWidth="1"
-              className="group-hover:scale-110 transition-transform origin-center"
-            />
+            {/* Pull Cord & Knob Group */}
+            <g ref={pullGroupRef} id="pullGroup">
+              <line
+                id="cord"
+                x1="92"
+                y1="68"
+                x2="92"
+                y2="114"
+                stroke="#5a5a5a"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <circle
+                id="pull"
+                cx="92"
+                cy="118"
+                r="5"
+                fill="#c9a24a"
+                stroke="#8c6a23"
+                strokeWidth="1"
+              />
+            </g>
 
             {/* Shade Group (contains Shade dome, rim & Bulb) */}
             <g
